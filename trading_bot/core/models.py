@@ -38,6 +38,7 @@ class Trade(BaseModel):
     entry_timestamp: datetime = Field(..., description="Timestamp of the trade entry.")
     entry_price: float = Field(..., description="Price at which the trade was entered.")
     entry_fee: float = Field(0.0, description="Fees associated with entering the trade.")
+    stop_loss_price: Optional[float] = Field(None, description="The price at which to exit for a loss.")
     size: float = Field(..., description="The quantity of the instrument traded.")
     status: Literal['open', 'closed'] = Field('open', description="Current status of the trade.")
 
