@@ -27,10 +27,13 @@ patterns:
   # Confluence score threshold
   min_confluence_score: 60 # Minimum score (0-100) to consider a signal valid
 
-  # Tolerances for pattern recognition (example for double top/bottom)
+  # Tolerances for pattern recognition
   double_top_bottom:
     price_similarity_threshold: 0.01 # Max 1% difference between the two tops/bottoms
     neckline_break_confirmation: 0.005 # Price must move 0.5% beyond neckline
+  abcd:
+    price_symmetry_tolerance: 0.15 # Allow 15% deviation between AB and CD legs
+    time_symmetry_tolerance: 0.25 # Allow 25% deviation in time
 
 # Execution settings
 execution:

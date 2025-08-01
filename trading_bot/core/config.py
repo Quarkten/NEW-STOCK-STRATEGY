@@ -16,12 +16,17 @@ class DoubleTopBottomSettings(BaseModel):
     price_similarity_threshold: float = Field(..., ge=0, description="Max percentage difference between the two tops/bottoms.")
     neckline_break_confirmation: float = Field(..., ge=0, description="Confirmation threshold for neckline break.")
 
+class AbcdSettings(BaseModel):
+    price_symmetry_tolerance: float = Field(..., ge=0)
+    time_symmetry_tolerance: float = Field(..., ge=0)
+
 class PatternSettings(BaseModel):
     enable_double_top_bottom: bool
     enable_engulfing: bool
     enable_abcd: bool
     min_confluence_score: int = Field(..., ge=0, le=100, description="Minimum score to consider a signal valid.")
     double_top_bottom: DoubleTopBottomSettings
+    abcd: AbcdSettings
 
 class ExecutionSettings(BaseModel):
     broker: Literal["paper", "interactive_brokers", "binance"]
