@@ -1,0 +1,21 @@
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data files (if they are large or private)
+data/
+*.csv
+
+# Notebook checkpoints
+.ipynb_checkpoints/
