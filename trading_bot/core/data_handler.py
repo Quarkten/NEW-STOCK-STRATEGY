@@ -37,9 +37,12 @@ def fetch_historical_data(symbol: str, timeframe: TimeFrame, start_date: str, en
     api = get_alpaca_api_client()
     try:
         bars = api.get_bars(symbol, timeframe, start_date, end_date, adjustment='raw').df
-        bars = bars.reset_index()
-        bars.rename(columns={'timestamp': 'timestamp_tz'}, inplace=True)
-        bars['timestamp'] = bars['timestamp_tz'].dt.tz_localize(None)
+        # The Alpaca API returns a pandas DataFrame with a DatetimeIndex.
+        # We reset the index to turn it into a column named 'timestamp'.
+        bars.reset_index(inplace=True)
+
+        # The 'timestamp' column is timezone-aware, so we make it naive for our model.
+        bars['timestamp'] = bars['timestamp'].dt.tz_localize(None)
         bars.columns = [col.lower() for col in bars.columns]
         required_columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
         bars = bars[required_columns]
