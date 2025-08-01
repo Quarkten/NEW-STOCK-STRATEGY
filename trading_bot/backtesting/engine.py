@@ -127,17 +127,33 @@ class Backtester:
         exit_price = 0
         exit_reason = ""
 
-        # For now, we only implement a simple stop-loss check
-        stop_loss_price = open_trade.stop_loss_price
-        if not stop_loss_price:
-            return
+        # --- Trailing Stop-Loss Logic ---
+        initial_risk = abs(open_trade.entry_price - open_trade.stop_loss_price)
+        current_pnl_per_share = candle.close - open_trade.entry_price if position.direction == "long" else open_trade.entry_price - candle.close
 
+        # Use a trailing stop once the trade is profitable by at least 1R
+        if current_pnl_per_share >= initial_risk:
+            # Trail stop below the low of the last 3 candles for a long
+            if position.direction == "long":
+                new_stop = min(c.low for c in self.data[symbol][-4:-1])
+                # Stop can only move up
+                if new_stop > open_trade.stop_loss_price:
+                    open_trade.stop_loss_price = new_stop
+            # Trail stop above the high of the last 3 candles for a short
+            else: # short
+                new_stop = max(c.high for c in self.data[symbol][-4:-1])
+                # Stop can only move down
+                if new_stop < open_trade.stop_loss_price:
+                    open_trade.stop_loss_price = new_stop
+
+        # --- Check for Exit ---
+        stop_loss_price = open_trade.stop_loss_price
         if position.direction == "long" and candle.low <= stop_loss_price:
             exit_price = stop_loss_price
-            exit_reason = "Stop-Loss"
+            exit_reason = "Trailing Stop" if current_pnl_per_share > 0 else "Stop-Loss"
         elif position.direction == "short" and candle.high >= stop_loss_price:
             exit_price = stop_loss_price
-            exit_reason = "Stop-Loss"
+            exit_reason = "Trailing Stop" if current_pnl_per_share > 0 else "Stop-Loss"
 
         if exit_price > 0:
             # Close the trade
