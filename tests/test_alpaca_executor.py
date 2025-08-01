@@ -17,7 +17,7 @@ class TestAlpacaExecutor(unittest.TestCase):
             from trading_bot.core.config import Config, AccountSettings, RiskSettings, PatternSettings, DoubleTopBottomSettings, AbcdSettings, GartleySettings, ExecutionSettings
             self.config = Config(
                 account=AccountSettings(equity=50000, max_daily_loss_pct=2.0),
-                risk=RiskSettings(default_per_trade_risk_pct=1.0, max_concurrent_exposure_pct=5.0),
+                risk=RiskSettings(default_per_trade_risk_pct=1.0, max_open_positions=5, max_daily_drawdown_pct=2.0),
                 instruments=["DUMMY"],
                 patterns=PatternSettings(enable_double_top_bottom=True, enable_engulfing=True, enable_abcd=True, min_confluence_score=60, double_top_bottom=DoubleTopBottomSettings(price_similarity_threshold=0.01, neckline_break_confirmation=0.005), abcd=AbcdSettings(price_symmetry_tolerance=0.15, time_symmetry_tolerance=0.25), gartley=GartleySettings(b_point_tolerance=0.05, d_point_tolerance=0.05)),
                 execution=ExecutionSettings(broker="paper", slippage_pct=0.001, commission_per_trade=1.0)

@@ -43,7 +43,20 @@ class Backtester:
         """
         print("--- Starting Backtest ---")
 
+        equity_at_day_start = self.account.equity
+
         for date in self.dates:
+            # --- Daily Risk Management ---
+            # Reset daily loss at the start of a new day
+            if date.day != (self.dates[self.dates.index(date)-1] if self.dates.index(date) > 0 else date).day:
+                equity_at_day_start = self.account.equity
+
+            # Check for max daily drawdown
+            daily_drawdown = (equity_at_day_start - self.account.equity) / equity_at_day_start
+            if daily_drawdown * 100 > self.config.risk.max_daily_drawdown_pct:
+                # Halt new trading for the day
+                continue
+
             for symbol in self.data.keys():
                 symbol_data_to_date = self._get_data_for_date(symbol, date)
                 if not symbol_data_to_date:
@@ -58,6 +71,10 @@ class Backtester:
                 # --- 2. Run strategy logic ---
                 from ..strategies.strategy_library import find_patterns_for_day, find_add_on_signals
 
+                # Check max positions limit before looking for new trades
+                if len(self.account.positions) >= self.config.risk.max_open_positions:
+                    continue
+
                 if symbol in self.account.positions:
                     # If we have a position, check for add-on signals
                     position = self.account.positions[symbol]
@@ -67,8 +84,8 @@ class Backtester:
                         add_on_signal = find_add_on_signals(position.direction, symbol, symbol_data_to_date)
                         if add_on_signal:
                             self._execute_signal(add_on_signal, current_candle)
-                else:
-                    # If no position, look for a new entry
+                elif len(self.account.positions) < self.config.risk.max_open_positions:
+                    # If no position, and we are under the limit, look for a new entry
                     signals = find_patterns_for_day(symbol, symbol_data_to_date, self.config)
                     if signals:
                         self._execute_signal(signals[0], current_candle)
