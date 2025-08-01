@@ -21,7 +21,7 @@ class Signal(BaseModel):
     instrument: str = Field(..., description="The trading instrument ticker.")
     timestamp: datetime = Field(..., description="The timestamp of the signal generation.")
     pattern_name: str = Field(..., description="The name of the pattern that generated the signal.")
-    signal_type: Literal['entry', 'exit'] = Field(..., description="Type of signal.")
+    signal_type: Literal['entry', 'exit', 'add'] = Field(..., description="Type of signal.")
     direction: Literal['long', 'short'] = Field(..., description="Signal direction.")
     confluence_score: float = Field(..., ge=0, le=100, description="A score (0-100) representing the quality of the signal based on various factors.")
     target_price: Optional[float] = Field(None, description="Optional target price for the trade.")

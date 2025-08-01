@@ -55,14 +55,22 @@ class Backtester:
                 if symbol in self.account.positions:
                     self._check_for_exit(symbol, current_candle)
 
-                # --- 2. Run strategy to generate new signals ---
-                from ..strategies.strategy_library import find_patterns_for_day
+                # --- 2. Run strategy logic ---
+                from ..strategies.strategy_library import find_patterns_for_day, find_add_on_signals
 
-                # We only want to trade if we don't already have a position
-                if symbol not in self.account.positions:
+                if symbol in self.account.positions:
+                    # If we have a position, check for add-on signals
+                    position = self.account.positions[symbol]
+                    # Only add to profitable trades
+                    current_pnl = (current_candle.close - position.average_entry_price) * position.size
+                    if current_pnl > 0:
+                        add_on_signal = find_add_on_signals(position.direction, symbol, symbol_data_to_date)
+                        if add_on_signal:
+                            self._execute_signal(add_on_signal, current_candle)
+                else:
+                    # If no position, look for a new entry
                     signals = find_patterns_for_day(symbol, symbol_data_to_date, self.config)
                     if signals:
-                        # For now, just take the first signal found
                         self._execute_signal(signals[0], current_candle)
 
         print("--- Backtest Complete ---")
@@ -100,20 +108,32 @@ class Backtester:
         self.account.equity -= commission
         self.account.trade_history.append(trade)
 
-        # Update or create position
-        if signal.instrument in self.account.positions:
-            # Logic for adding to existing positions would go here
-            print("Note: Position already exists. Averaging down not yet implemented.")
-        else:
+        # --- Update or Create Position ---
+        if signal.signal_type == "add":
+            if signal.instrument in self.account.positions:
+                position = self.account.positions[signal.instrument]
+
+                # Recalculate average entry price
+                new_total_size = position.size + qty
+                new_total_cost = (position.average_entry_price * position.size) + (entry_price * qty)
+                position.average_entry_price = new_total_cost / new_total_size
+                position.size = new_total_size
+
+                print(f"{candle.timestamp.date()}: ADDED TO {signal.direction.upper()} "
+                      f"{signal.instrument} @ {entry_price:.2f} (New Size: {new_total_size:.4f})")
+            else:
+                # Should not happen, but handle gracefully
+                print("Warning: Received 'add' signal but no open position found. Ignoring.")
+
+        elif signal.signal_type == "entry":
             self.account.positions[signal.instrument] = Position(
                 instrument=signal.instrument,
                 direction=signal.direction,
                 size=qty,
                 average_entry_price=entry_price
             )
-
-        print(f"{candle.timestamp.date()}: EXECUTED {signal.direction.upper()} "
-              f"{signal.instrument} @ {entry_price:.2f} (Qty: {qty:.4f})")
+            print(f"{candle.timestamp.date()}: EXECUTED {signal.direction.upper()} "
+                  f"{signal.instrument} @ {entry_price:.2f} (Qty: {qty:.4f})")
 
     def _check_for_exit(self, symbol: str, candle: Ohlcv):
         """Checks if an open position should be closed due to SL/TP."""
