@@ -26,6 +26,7 @@ class Signal(BaseModel):
     confluence_score: float = Field(..., ge=0, le=100, description="A score (0-100) representing the quality of the signal based on various factors.")
     target_price: Optional[float] = Field(None, description="Optional target price for the trade.")
     stop_loss: Optional[float] = Field(None, description="The price at which to place the stop-loss.")
+    candle: Ohlcv = Field(..., description="The candle that generated the signal.")
 
 class Trade(BaseModel):
     """
