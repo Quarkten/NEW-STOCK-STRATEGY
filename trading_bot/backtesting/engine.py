@@ -13,7 +13,6 @@ class BacktestAccount:
 
     def update_equity(self, new_equity: float):
         self.equity = new_equity
-        self.equity_curve.append(new_equity)
 
 class Backtester:
     """
@@ -43,7 +42,32 @@ class Backtester:
         """
         print("--- Starting Backtest ---")
 
+        equity_at_day_start = self.account.equity
+
         for date in self.dates:
+            # --- Daily Risk Management ---
+            # Reset daily loss at the start of a new day
+            if date.day != (self.dates[self.dates.index(date)-1] if self.dates.index(date) > 0 else date).day:
+                equity_at_day_start = self.account.equity
+
+            # Check for max daily drawdown
+            daily_drawdown = (equity_at_day_start - self.account.equity) / equity_at_day_start
+            if daily_drawdown * 100 > self.config.risk.max_daily_drawdown_pct:
+                # Halt new trading for the day
+                continue
+
+            # --- Mark-to-Market and Daily Processing ---
+            unrealized_pnl = 0
+            for position in self.account.positions.values():
+                # Get the current candle for the position's symbol
+                latest_candle_for_pos = next((c for c in reversed(self.data[position.instrument]) if c.timestamp.date() <= date), None)
+                if latest_candle_for_pos:
+                    position.update_pnl(latest_candle_for_pos.close)
+                    unrealized_pnl += position.unrealized_pnl
+
+            current_portfolio_value = self.account.equity + unrealized_pnl
+            self.account.equity_curve.append(current_portfolio_value)
+
             for symbol in self.data.keys():
                 symbol_data_to_date = self._get_data_for_date(symbol, date)
                 if not symbol_data_to_date:
@@ -55,14 +79,26 @@ class Backtester:
                 if symbol in self.account.positions:
                     self._check_for_exit(symbol, current_candle)
 
-                # --- 2. Run strategy to generate new signals ---
-                from ..strategies.strategy_library import find_patterns_for_day
+                # --- 2. Run strategy logic ---
+                from ..strategies.strategy_library import find_patterns_for_day, find_add_on_signals
 
-                # We only want to trade if we don't already have a position
-                if symbol not in self.account.positions:
+                # Check max positions limit before looking for new trades
+                if len(self.account.positions) >= self.config.risk.max_open_positions:
+                    continue
+
+                if symbol in self.account.positions:
+                    # If we have a position, check for add-on signals
+                    position = self.account.positions[symbol]
+                    # Only add to profitable trades
+                    current_pnl = (current_candle.close - position.average_entry_price) * position.size
+                    if current_pnl > 0:
+                        add_on_signal = find_add_on_signals(position.direction, symbol, symbol_data_to_date)
+                        if add_on_signal:
+                            self._execute_signal(add_on_signal, current_candle)
+                elif len(self.account.positions) < self.config.risk.max_open_positions:
+                    # If no position, and we are under the limit, look for a new entry
                     signals = find_patterns_for_day(symbol, symbol_data_to_date, self.config)
                     if signals:
-                        # For now, just take the first signal found
                         self._execute_signal(signals[0], current_candle)
 
         print("--- Backtest Complete ---")
@@ -100,20 +136,32 @@ class Backtester:
         self.account.equity -= commission
         self.account.trade_history.append(trade)
 
-        # Update or create position
-        if signal.instrument in self.account.positions:
-            # Logic for adding to existing positions would go here
-            print("Note: Position already exists. Averaging down not yet implemented.")
-        else:
+        # --- Update or Create Position ---
+        if signal.signal_type == "add":
+            if signal.instrument in self.account.positions:
+                position = self.account.positions[signal.instrument]
+
+                # Recalculate average entry price
+                new_total_size = position.size + qty
+                new_total_cost = (position.average_entry_price * position.size) + (entry_price * qty)
+                position.average_entry_price = new_total_cost / new_total_size
+                position.size = new_total_size
+
+                print(f"{candle.timestamp.date()}: ADDED TO {signal.direction.upper()} "
+                      f"{signal.instrument} @ {entry_price:.2f} (New Size: {new_total_size:.4f})")
+            else:
+                # Should not happen, but handle gracefully
+                print("Warning: Received 'add' signal but no open position found. Ignoring.")
+
+        elif signal.signal_type == "entry":
             self.account.positions[signal.instrument] = Position(
                 instrument=signal.instrument,
                 direction=signal.direction,
                 size=qty,
                 average_entry_price=entry_price
             )
-
-        print(f"{candle.timestamp.date()}: EXECUTED {signal.direction.upper()} "
-              f"{signal.instrument} @ {entry_price:.2f} (Qty: {qty:.4f})")
+            print(f"{candle.timestamp.date()}: EXECUTED {signal.direction.upper()} "
+                  f"{signal.instrument} @ {entry_price:.2f} (Qty: {qty:.4f})")
 
     def _check_for_exit(self, symbol: str, candle: Ohlcv):
         """Checks if an open position should be closed due to SL/TP."""
@@ -127,17 +175,33 @@ class Backtester:
         exit_price = 0
         exit_reason = ""
 
-        # For now, we only implement a simple stop-loss check
-        stop_loss_price = open_trade.stop_loss_price
-        if not stop_loss_price:
-            return
+        # --- Trailing Stop-Loss Logic ---
+        initial_risk = abs(open_trade.entry_price - open_trade.stop_loss_price)
+        current_pnl_per_share = candle.close - open_trade.entry_price if position.direction == "long" else open_trade.entry_price - candle.close
 
+        # Use a trailing stop once the trade is profitable by at least 1R
+        if current_pnl_per_share >= initial_risk:
+            # Trail stop below the low of the last 3 candles for a long
+            if position.direction == "long":
+                new_stop = min(c.low for c in self.data[symbol][-4:-1])
+                # Stop can only move up
+                if new_stop > open_trade.stop_loss_price:
+                    open_trade.stop_loss_price = new_stop
+            # Trail stop above the high of the last 3 candles for a short
+            else: # short
+                new_stop = max(c.high for c in self.data[symbol][-4:-1])
+                # Stop can only move down
+                if new_stop < open_trade.stop_loss_price:
+                    open_trade.stop_loss_price = new_stop
+
+        # --- Check for Exit ---
+        stop_loss_price = open_trade.stop_loss_price
         if position.direction == "long" and candle.low <= stop_loss_price:
             exit_price = stop_loss_price
-            exit_reason = "Stop-Loss"
+            exit_reason = "Trailing Stop" if current_pnl_per_share > 0 else "Stop-Loss"
         elif position.direction == "short" and candle.high >= stop_loss_price:
             exit_price = stop_loss_price
-            exit_reason = "Stop-Loss"
+            exit_reason = "Trailing Stop" if current_pnl_per_share > 0 else "Stop-Loss"
 
         if exit_price > 0:
             # Close the trade
@@ -152,8 +216,8 @@ class Backtester:
         from .reporting import generate_report
         generate_report(
             trades=self.account.trade_history,
-            initial_equity=self.config.account.equity,
-            final_equity=self.account.equity
+            equity_curve=self.account.equity_curve,
+            initial_equity=self.config.account.equity
         )
 
 if __name__ == '__main__':

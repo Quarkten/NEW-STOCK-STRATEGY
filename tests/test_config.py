@@ -15,7 +15,8 @@ account:
 
 risk:
   default_per_trade_risk_pct: 1.0
-  max_concurrent_exposure_pct: 5.0
+  max_open_positions: 5
+  max_daily_drawdown_pct: 2.0
 
 instruments:
   - "SPY"

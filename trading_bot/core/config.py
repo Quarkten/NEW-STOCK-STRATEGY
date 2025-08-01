@@ -10,7 +10,8 @@ class AccountSettings(BaseModel):
 
 class RiskSettings(BaseModel):
     default_per_trade_risk_pct: float = Field(..., ge=0, lt=100, description="Default risk per trade as a percentage of equity.")
-    max_concurrent_exposure_pct: float = Field(..., ge=0, description="Max total exposure as a percentage of equity.")
+    max_open_positions: int = Field(..., gt=0, description="Maximum number of concurrent open trades.")
+    max_daily_drawdown_pct: float = Field(..., ge=0, lt=100, description="Maximum daily loss before halting trades.")
 
 class DoubleTopBottomSettings(BaseModel):
     price_similarity_threshold: float = Field(..., ge=0, description="Max percentage difference between the two tops/bottoms.")

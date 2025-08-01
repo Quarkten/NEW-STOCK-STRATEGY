@@ -8,7 +8,8 @@ account:
 # Risk management settings
 risk:
   default_per_trade_risk_pct: 1.0 # Default risk per trade as a percentage of equity
-  max_concurrent_exposure_pct: 5.0 # Max total exposure as a percentage of equity
+  max_open_positions: 5 # Max number of concurrent open trades
+  max_daily_drawdown_pct: 2.0 # Max percentage of equity to lose in a day before halting
 
 # Instruments to trade
 instruments:
