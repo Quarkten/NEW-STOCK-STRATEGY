@@ -83,6 +83,14 @@ def find_patterns_for_day(
         abcd_patterns = find_abcd_patterns(swing_highs, swing_lows, config.patterns.abcd.model_dump())
         # Logic to create a signal from an AB=CD pattern would go here...
 
+    # Double Top/Bottom Patterns
+    if config.patterns.enable_double_top_bottom:
+        from ..patterns.double_top_bottom import find_double_top_bottom_patterns
+        dtb_signals = find_double_top_bottom_patterns(swing_highs, swing_lows, data, config.patterns.double_top_bottom.model_dump())
+        for signal in dtb_signals:
+            signal.instrument = instrument # Set the instrument on the signal
+            signals.append(signal)
+
     return signals
 
 def find_add_on_signals(
