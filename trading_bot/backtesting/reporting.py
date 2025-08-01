@@ -2,39 +2,47 @@ from typing import List
 import pandas as pd
 from ..core.models import Trade
 
-def generate_report(trades: List[Trade], initial_equity: float, final_equity: float):
+import numpy as np
+import matplotlib.pyplot as plt
+
+def generate_report(trades: List[Trade], equity_curve: List[float], initial_equity: float):
     """
-    Generates and prints a detailed performance report from a list of trades.
+    Generates, prints, and plots a detailed performance report.
     """
     if not trades:
         print("No trades were made. No report to generate.")
         return
 
+    final_equity = equity_curve[-1]
+
+    # --- Basic Stats ---
     wins = [t for t in trades if t.pnl is not None and t.pnl > 0]
     losses = [t for t in trades if t.pnl is not None and t.pnl < 0]
-
     total_trades = len(trades)
     win_rate = (len(wins) / total_trades) * 100 if total_trades > 0 else 0
-
     total_pnl = final_equity - initial_equity
-
-    # --- Calculate Profit Factor and Averages ---
     total_profit = sum(t.pnl for t in wins)
     total_loss = abs(sum(t.pnl for t in losses))
-
     profit_factor = total_profit / total_loss if total_loss > 0 else 999
-
     avg_win = total_profit / len(wins) if wins else 0
     avg_loss = total_loss / len(losses) if losses else 0
-
     avg_win_loss_ratio = avg_win / avg_loss if avg_loss > 0 else 999
+
+    # --- Advanced Metrics ---
+    returns = pd.Series(equity_curve).pct_change().dropna()
+    sharpe_ratio = np.sqrt(252) * returns.mean() / returns.std() if returns.std() > 0 else 0
+
+    # Max Drawdown
+    peak = pd.Series(equity_curve).expanding(min_periods=1).max()
+    drawdown = (pd.Series(equity_curve) - peak) / peak
+    max_drawdown = drawdown.min() * 100
 
     # --- Print Report ---
     print("\n--- Backtest Performance Report ---")
     print("="*40)
     print(f"Initial Equity:       ${initial_equity:,.2f}")
     print(f"Final Equity:         ${final_equity:,.2f}")
-    print(f"Net PnL:              ${total_pnl:,.2f}")
+    print(f"Net PnL:              ${total_pnl:,.2f} ({total_pnl/initial_equity:.2%})")
     print("-"*40)
     print(f"Total Trades:         {total_trades}")
     print(f"Win Rate:             {win_rate:.2f}%")
@@ -42,7 +50,20 @@ def generate_report(trades: List[Trade], initial_equity: float, final_equity: fl
     print(f"Avg Win / Avg Loss:   {avg_win_loss_ratio:.2f}")
     print(f"Average Win:          ${avg_win:,.2f}")
     print(f"Average Loss:         ${avg_loss:,.2f}")
+    print("-"*40)
+    print(f"Sharpe Ratio:         {sharpe_ratio:.2f}")
+    print(f"Max Drawdown:         {max_drawdown:.2f}%")
     print("="*40)
+
+    # --- Generate Plot ---
+    plt.figure(figsize=(12, 6))
+    plt.plot(equity_curve)
+    plt.title('Portfolio Equity Curve')
+    plt.xlabel('Days')
+    plt.ylabel('Equity ($)')
+    plt.grid(True)
+    plt.savefig('equity_curve.png')
+    print("Equity curve plot saved to equity_curve.png")
 
 # --- Test Block ---
 if __name__ == '__main__':

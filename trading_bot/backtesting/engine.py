@@ -13,7 +13,6 @@ class BacktestAccount:
 
     def update_equity(self, new_equity: float):
         self.equity = new_equity
-        self.equity_curve.append(new_equity)
 
 class Backtester:
     """
@@ -56,6 +55,18 @@ class Backtester:
             if daily_drawdown * 100 > self.config.risk.max_daily_drawdown_pct:
                 # Halt new trading for the day
                 continue
+
+            # --- Mark-to-Market and Daily Processing ---
+            unrealized_pnl = 0
+            for position in self.account.positions.values():
+                # Get the current candle for the position's symbol
+                latest_candle_for_pos = next((c for c in reversed(self.data[position.instrument]) if c.timestamp.date() <= date), None)
+                if latest_candle_for_pos:
+                    position.update_pnl(latest_candle_for_pos.close)
+                    unrealized_pnl += position.unrealized_pnl
+
+            current_portfolio_value = self.account.equity + unrealized_pnl
+            self.account.equity_curve.append(current_portfolio_value)
 
             for symbol in self.data.keys():
                 symbol_data_to_date = self._get_data_for_date(symbol, date)
@@ -205,8 +216,8 @@ class Backtester:
         from .reporting import generate_report
         generate_report(
             trades=self.account.trade_history,
-            initial_equity=self.config.account.equity,
-            final_equity=self.account.equity
+            equity_curve=self.account.equity_curve,
+            initial_equity=self.config.account.equity
         )
 
 if __name__ == '__main__':
