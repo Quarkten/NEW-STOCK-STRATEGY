@@ -47,11 +47,31 @@ def find_patterns_for_day(
                 candle=current_candle
             ))
 
-    # --- 2. Harmonic and Geometric Patterns ---
+    # --- 2. Determine Market Regime ---
     swing_highs, swing_lows = find_swing_points(data, order=5)
-
     if len(swing_highs) < 2 or len(swing_lows) < 2:
-        return signals # Not enough swings for these patterns
+        return signals # Not enough swings for regime or harmonic patterns
+
+    from ..patterns.market_regime import detect_market_regime
+    regime = detect_market_regime(swing_highs, swing_lows)
+
+    # --- 3. Score and Filter Signals ---
+    scored_signals = []
+    from ..core.scorer import calculate_confluence_score
+    for signal in signals:
+        # First, filter by regime
+        if (regime == "Uptrend" and signal.direction == "long") or \
+           (regime == "Downtrend" and signal.direction == "short"):
+
+            # If aligned with regime, calculate confluence score
+            score = calculate_confluence_score(signal, data)
+            signal.confluence_score = score
+
+            # Only include signals that meet the minimum score
+            if score >= config.patterns.min_confluence_score:
+                scored_signals.append(signal)
+
+    signals = scored_signals
 
     # Gartley Patterns
     if config.patterns.enable_abcd: # Assuming gartley uses abcd flag for now
