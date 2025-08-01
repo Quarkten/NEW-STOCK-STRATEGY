@@ -2,7 +2,7 @@
 
 # General settings
 account:
-  equity: 100000.0  # Starting account equity
+  equity: 1000.0  # Starting account equity
   max_daily_loss_pct: 2.0 # Max percentage of equity to lose in a day
 
 # Risk management settings
