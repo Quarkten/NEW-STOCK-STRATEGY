@@ -1,0 +1,39 @@
+# Trading Bot Configuration
+
+# General settings
+account:
+  equity: 100000.0  # Starting account equity
+  max_daily_loss_pct: 2.0 # Max percentage of equity to lose in a day
+
+# Risk management settings
+risk:
+  default_per_trade_risk_pct: 1.0 # Default risk per trade as a percentage of equity
+  max_concurrent_exposure_pct: 5.0 # Max total exposure as a percentage of equity
+
+# Instruments to trade
+instruments:
+  - "SPY" # S&P 500 ETF
+  - "QQQ" # Nasdaq 100 ETF
+  - "BTC-USD" # Bitcoin
+  - "ETH-USD" # Ethereum
+
+# Pattern and signal settings
+patterns:
+  # Feature flags to enable/disable patterns
+  enable_double_top_bottom: true
+  enable_engulfing: true
+  enable_abcd: true
+
+  # Confluence score threshold
+  min_confluence_score: 60 # Minimum score (0-100) to consider a signal valid
+
+  # Tolerances for pattern recognition (example for double top/bottom)
+  double_top_bottom:
+    price_similarity_threshold: 0.01 # Max 1% difference between the two tops/bottoms
+    neckline_break_confirmation: 0.005 # Price must move 0.5% beyond neckline
+
+# Execution settings
+execution:
+  broker: "paper" # "paper", "interactive_brokers", "binance"
+  slippage_pct: 0.001 # 0.1% slippage assumption for backtesting
+  commission_per_trade: 1.0 # Fixed commission per trade in USD
