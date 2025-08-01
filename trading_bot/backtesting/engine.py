@@ -56,19 +56,14 @@ class Backtester:
                     self._check_for_exit(symbol, current_candle)
 
                 # --- 2. Run strategy to generate new signals ---
-                # For testing, let's generate a dummy signal on a specific day
-                if symbol == "DUMMY" and date.day == 5:
-                    dummy_signal = Signal(
-                        instrument="DUMMY",
-                        timestamp=current_candle.timestamp,
-                        pattern_name="Dummy Pattern",
-                        signal_type="entry",
-                        direction="long",
-                        confluence_score=100,
-                        stop_loss=current_candle.low,
-                        candle=current_candle
-                    )
-                    self._execute_signal(dummy_signal, current_candle)
+                from ..strategies.strategy_library import find_patterns_for_day
+
+                # We only want to trade if we don't already have a position
+                if symbol not in self.account.positions:
+                    signals = find_patterns_for_day(symbol, symbol_data_to_date, self.config)
+                    if signals:
+                        # For now, just take the first signal found
+                        self._execute_signal(signals[0], current_candle)
 
         print("--- Backtest Complete ---")
         self.generate_report()
