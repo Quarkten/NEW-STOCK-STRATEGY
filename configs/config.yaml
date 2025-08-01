@@ -34,6 +34,9 @@ patterns:
   abcd:
     price_symmetry_tolerance: 0.15 # Allow 15% deviation between AB and CD legs
     time_symmetry_tolerance: 0.25 # Allow 25% deviation in time
+  gartley:
+    b_point_tolerance: 0.05 # 5% tolerance around the 0.618 XA retracement
+    d_point_tolerance: 0.05 # 5% tolerance around the 0.786 XA retracement
 
 # Execution settings
 execution:
