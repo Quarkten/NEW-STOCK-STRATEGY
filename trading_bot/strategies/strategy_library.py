@@ -6,90 +6,61 @@ from ..patterns.engulfing import find_engulfing_patterns
 from ..patterns.abcd import find_abcd_patterns
 from ..patterns.gartley import find_gartley_patterns
 
-def find_patterns_for_day(
+def find_signals(
     instrument: str,
-    data: List[Ohlcv],
+    daily_data: List[Ohlcv],
+    hourly_data: List[Ohlcv],
     config: Config
 ) -> List[Signal]:
     """
-    Runs all available pattern detectors on a given dataset and returns any signals.
-
-    Args:
-        instrument (str): The symbol being analyzed.
-        data (List[Ohlcv]): The historical data for the instrument.
-        config (Config): The application's configuration.
-
-    Returns:
-        List[Signal]: A list of signals found for the given day.
+    Runs all available pattern detectors on the hourly data, filtered by the daily trend.
     """
-    if not data:
+    if len(daily_data) < 20 or len(hourly_data) < 2: # Need enough data for context
         return []
 
-    signals = []
-    current_candle = data[-1]
+    # 1. Determine Major Trend from Daily Data
+    from ..patterns.market_regime import find_swing_points, detect_market_regime
+    daily_swing_highs, daily_swing_lows = find_swing_points(daily_data, order=10)
+    if len(daily_swing_highs) < 2 or len(daily_swing_lows) < 2:
+        return []
+    major_trend = detect_market_regime(daily_swing_highs, daily_swing_lows)
 
-    # --- 1. Engulfing Patterns ---
+    if major_trend == "Ranging":
+        return [] # Only trade in clear daily trends
+
+    # 2. Look for Entry Patterns on Hourly Data
+    signals = []
+    current_hourly_candle = hourly_data[-1]
+
+    # Engulfing Patterns on Hourly Chart
     if config.patterns.enable_engulfing:
-        engulfing_patterns = find_engulfing_patterns(data[-2:]) # Only need last 2 candles
+        engulfing_patterns = find_engulfing_patterns(hourly_data[-2:])
         if engulfing_patterns:
             pattern = engulfing_patterns[0]
             direction = "long" if pattern.pattern_type == "bullish" else "short"
-            stop_loss = pattern.candle.low if direction == "long" else pattern.candle.high
 
-            signals.append(Signal(
-                instrument=instrument,
-                timestamp=current_candle.timestamp,
-                pattern_name="Engulfing",
-                signal_type="entry",
-                direction=direction,
-                confluence_score=70, # Placeholder
-                stop_loss=stop_loss,
-                candle=current_candle
-            ))
+            # 3. Check for Alignment
+            if (major_trend == "Uptrend" and direction == "long") or \
+               (major_trend == "Downtrend" and direction == "short"):
 
-    # --- 2. Determine Market Regime ---
-    swing_highs, swing_lows = find_swing_points(data, order=5)
-    if len(swing_highs) < 2 or len(swing_lows) < 2:
-        return signals # Not enough swings for regime or harmonic patterns
+                stop_loss = pattern.candle.low if direction == "long" else pattern.candle.high
+                signal = Signal(
+                    instrument=instrument,
+                    timestamp=current_hourly_candle.timestamp,
+                    pattern_name=f"H1 Engulfing ({major_trend})",
+                    signal_type="entry",
+                    direction=direction,
+                    confluence_score=0, # Will be scored later
+                    stop_loss=stop_loss,
+                    candle=current_hourly_candle
+                )
+                signals.append(signal)
 
-    from ..patterns.market_regime import detect_market_regime
-    regime = detect_market_regime(swing_highs, swing_lows)
+    # (Other pattern detectors like AB=CD, Gartley would be called here on the hourly data)
 
-    # --- 3. Score and Filter Signals ---
-    scored_signals = []
-    from ..core.scorer import calculate_confluence_score
-    for signal in signals:
-        # First, filter by regime
-        if (regime == "Uptrend" and signal.direction == "long") or \
-           (regime == "Downtrend" and signal.direction == "short"):
-
-            # If aligned with regime, calculate confluence score
-            score = calculate_confluence_score(signal, data)
-            signal.confluence_score = score
-
-            # Only include signals that meet the minimum score
-            if score >= config.patterns.min_confluence_score:
-                scored_signals.append(signal)
-
-    signals = scored_signals
-
-    # Gartley Patterns
-    if config.patterns.enable_abcd: # Assuming gartley uses abcd flag for now
-        gartley_patterns = find_gartley_patterns(swing_highs, swing_lows, config.patterns.gartley.model_dump())
-        # Logic to create a signal from a Gartley pattern would go here...
-
-    # AB=CD Patterns
-    if config.patterns.enable_abcd:
-        abcd_patterns = find_abcd_patterns(swing_highs, swing_lows, config.patterns.abcd.model_dump())
-        # Logic to create a signal from an AB=CD pattern would go here...
-
-    # Double Top/Bottom Patterns
-    if config.patterns.enable_double_top_bottom:
-        from ..patterns.double_top_bottom import find_double_top_bottom_patterns
-        dtb_signals = find_double_top_bottom_patterns(swing_highs, swing_lows, data, config.patterns.double_top_bottom.model_dump())
-        for signal in dtb_signals:
-            signal.instrument = instrument # Set the instrument on the signal
-            signals.append(signal)
+    # 4. Score and filter the final signals
+    # (Scoring logic can also be enhanced with MTF context)
+    # ...
 
     return signals
 
