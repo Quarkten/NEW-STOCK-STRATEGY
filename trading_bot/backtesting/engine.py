@@ -22,19 +22,15 @@ class Backtester:
         self.data = data
         self.config = config
         self.account = BacktestAccount(config.account.equity)
-        self.dates = self._get_sorted_unique_dates()
+        self.timestamps = self._get_master_timestamp_list()
 
-    def _get_sorted_unique_dates(self):
-        """Creates a master list of all unique dates across all data feeds."""
-        all_dates = set()
+    def _get_master_timestamp_list(self):
+        """Creates a master list of all unique hourly timestamps across all data feeds."""
+        all_timestamps = set()
         for symbol_data in self.data.values():
-            for candle in symbol_data:
-                all_dates.add(candle.timestamp.date())
-        return sorted(list(all_dates))
-
-    def _get_data_for_date(self, symbol: str, date):
-        """Gets all the candles for a specific symbol up to a given date."""
-        return [c for c in self.data[symbol] if c.timestamp.date() <= date]
+            for candle in symbol_data['hourly']:
+                all_timestamps.add(candle.timestamp)
+        return sorted(list(all_timestamps))
 
     def run(self):
         """
@@ -42,64 +38,48 @@ class Backtester:
         """
         print("--- Starting Backtest ---")
 
-        equity_at_day_start = self.account.equity
+        # Get a master list of unique days, not hours
+        self.dates = sorted(list(set(c.timestamp.date() for s_data in self.data.values() for c in s_data['daily'])))
 
         for date in self.dates:
-            # --- Daily Risk Management ---
-            # Reset daily loss at the start of a new day
-            if date.day != (self.dates[self.dates.index(date)-1] if self.dates.index(date) > 0 else date).day:
-                equity_at_day_start = self.account.equity
+            # Get all hourly candles for the current day
+            hourly_candles_for_day = {
+                symbol: [c for c in self.data[symbol]['hourly'] if c.timestamp.date() == date]
+                for symbol in self.data.keys()
+            }
 
-            # Check for max daily drawdown
-            daily_drawdown = (equity_at_day_start - self.account.equity) / equity_at_day_start
-            if daily_drawdown * 100 > self.config.risk.max_daily_drawdown_pct:
-                # Halt new trading for the day
-                continue
+            # Loop through the hours of the day
+            for hour in range(24): # Simplistic loop, a real system would use market hours
+                for symbol in self.data.keys():
+                    current_hourly_candle = next((c for c in hourly_candles_for_day[symbol] if c.timestamp.hour == hour), None)
+                    if not current_hourly_candle:
+                        continue
 
-            # --- Mark-to-Market and Daily Processing ---
+                    # Get all data up to the current point in time
+                    daily_data_to_date = [c for c in self.data[symbol]['daily'] if c.timestamp.date() <= date]
+                    hourly_data_to_date = [c for c in self.data[symbol]['hourly'] if c.timestamp <= current_hourly_candle.timestamp]
+
+                    # --- 1. Check for SL/TP on open positions ---
+                    if symbol in self.account.positions:
+                        self._check_for_exit(symbol, current_hourly_candle)
+
+                    # --- 2. Run strategy logic ---
+                    from ..strategies.strategy_library import find_signals
+                    if symbol not in self.account.positions:
+                        signals = find_signals(instrument=symbol, daily_data=daily_data_to_date, hourly_data=hourly_data_to_date, config=self.config)
+                        if signals:
+                            self._execute_signal(signals[0], current_hourly_candle)
+
+            # --- Mark-to-Market at the end of the day ---
             unrealized_pnl = 0
             for position in self.account.positions.values():
-                # Get the current candle for the position's symbol
-                latest_candle_for_pos = next((c for c in reversed(self.data[position.instrument]) if c.timestamp.date() <= date), None)
+                latest_candle_for_pos = next((c for c in reversed(self.data[position.instrument]['daily']) if c.timestamp.date() <= date), None)
                 if latest_candle_for_pos:
                     position.update_pnl(latest_candle_for_pos.close)
                     unrealized_pnl += position.unrealized_pnl
 
             current_portfolio_value = self.account.equity + unrealized_pnl
             self.account.equity_curve.append(current_portfolio_value)
-
-            for symbol in self.data.keys():
-                symbol_data_to_date = self._get_data_for_date(symbol, date)
-                if not symbol_data_to_date:
-                    continue
-
-                current_candle = symbol_data_to_date[-1]
-
-                # --- 1. Check for SL/TP on open positions ---
-                if symbol in self.account.positions:
-                    self._check_for_exit(symbol, current_candle)
-
-                # --- 2. Run strategy logic ---
-                from ..strategies.strategy_library import find_patterns_for_day, find_add_on_signals
-
-                # Check max positions limit before looking for new trades
-                if len(self.account.positions) >= self.config.risk.max_open_positions:
-                    continue
-
-                if symbol in self.account.positions:
-                    # If we have a position, check for add-on signals
-                    position = self.account.positions[symbol]
-                    # Only add to profitable trades
-                    current_pnl = (current_candle.close - position.average_entry_price) * position.size
-                    if current_pnl > 0:
-                        add_on_signal = find_add_on_signals(position.direction, symbol, symbol_data_to_date)
-                        if add_on_signal:
-                            self._execute_signal(add_on_signal, current_candle)
-                elif len(self.account.positions) < self.config.risk.max_open_positions:
-                    # If no position, and we are under the limit, look for a new entry
-                    signals = find_patterns_for_day(symbol, symbol_data_to_date, self.config)
-                    if signals:
-                        self._execute_signal(signals[0], current_candle)
 
         print("--- Backtest Complete ---")
         self.generate_report()
@@ -110,8 +90,11 @@ class Backtester:
         entry_price = candle.close
         commission = self.config.execution.commission_per_trade
 
+        # Use the equity at the start of the day for position sizing to avoid compounding unrealized PnL
+        equity_for_sizing = next((e for e in reversed(self.account.equity_curve)), self.account.equity)
+
         qty = calculate_position_size(
-            account_equity=self.account.equity,
+            account_equity=equity_for_sizing,
             risk_per_trade_pct=self.config.risk.default_per_trade_risk_pct,
             entry_price=entry_price,
             stop_loss_price=signal.stop_loss
@@ -181,16 +164,18 @@ class Backtester:
 
         # Use a trailing stop once the trade is profitable by at least 1R
         if current_pnl_per_share >= initial_risk:
+            # Get the recent hourly data to determine the trailing stop
+            recent_hourly_data = self.data[symbol]['hourly']
+            if len(recent_hourly_data) < 4: return # Not enough data to trail
+
             # Trail stop below the low of the last 3 candles for a long
             if position.direction == "long":
-                new_stop = min(c.low for c in self.data[symbol][-4:-1])
-                # Stop can only move up
+                new_stop = min(c.low for c in recent_hourly_data[-4:-1])
                 if new_stop > open_trade.stop_loss_price:
                     open_trade.stop_loss_price = new_stop
             # Trail stop above the high of the last 3 candles for a short
             else: # short
-                new_stop = max(c.high for c in self.data[symbol][-4:-1])
-                # Stop can only move down
+                new_stop = max(c.high for c in recent_hourly_data[-4:-1])
                 if new_stop < open_trade.stop_loss_price:
                     open_trade.stop_loss_price = new_stop
 

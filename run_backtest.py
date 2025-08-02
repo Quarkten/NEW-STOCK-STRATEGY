@@ -30,17 +30,22 @@ def main():
         print("Error: config.yaml not found.")
         return
 
-    # 3. Fetch Historical Data for all instruments
+    # 3. Fetch Historical Data for all instruments and timeframes
     all_data = {}
     for instrument in config.instruments:
         print(f"Fetching historical data for {instrument}...")
-        # Using a fixed range for this example backtest
-        data = fetch_historical_data(instrument, TimeFrame.Day, "2022-01-01", "2023-01-01")
-        if data:
-            all_data[instrument] = data
-            print(f"Successfully fetched {len(data)} bars for {instrument}.")
+
+        daily_data = fetch_historical_data(instrument, TimeFrame.Day, "2022-01-01", "2023-01-01")
+        hourly_data = fetch_historical_data(instrument, TimeFrame.Hour, "2022-01-01", "2023-01-01")
+
+        if daily_data and hourly_data:
+            all_data[instrument] = {
+                "daily": daily_data,
+                "hourly": hourly_data
+            }
+            print(f"Successfully fetched {len(daily_data)} daily and {len(hourly_data)} hourly bars for {instrument}.")
         else:
-            print(f"Could not fetch data for {instrument}. It will be excluded from this backtest.")
+            print(f"Could not fetch complete MTF data for {instrument}. It will be excluded.")
 
     if not all_data:
         print("No data fetched. Aborting backtest.")
