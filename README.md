@@ -50,7 +50,9 @@ This bot is a complete, end-to-end system with the following features:
 - **Unit Test Suite:** The entire codebase is covered by a comprehensive suite of unit tests using Python's `unittest` framework, with mocking for external services.
 - **Modular Architecture:** The code is organized into logical, decoupled modules for data, patterns, execution, backtesting, and risk.
 
-## How to Run a Backtest
+## How to Run
+
+Before running any command, ensure your environment is set up correctly:
 
 1.  **Set Up API Keys:**
     -   The bot requires an Alpaca Paper Trading account.
@@ -64,20 +66,43 @@ This bot is a complete, end-to-end system with the following features:
 2.  **Install Dependencies:**
     ```bash
     pip install -r requirements.txt
-    # (Note: A requirements.txt file would need to be created)
-    # For now, install manually:
-    pip install pydantic pyyaml pandas alpaca-trade-api python-dotenv
     ```
 
-3.  **Configure the Backtest:**
-    -   Open `configs/config.yaml`.
-    -   Modify the `instruments` list, the date range in `run_backtest.py`, and any risk or pattern parameters you wish to test.
+### Running a Backtest
 
-4.  **Run the Backtest:**
-    ```bash
-    python3 run_backtest.py
-    ```
-    The script will fetch the latest data, run the simulation, and print a detailed performance report to the console.
+This is the primary way to test a strategy's performance on historical data.
+
+```bash
+python3 run_backtest.py
+```
+This command will:
+- Load the settings from `configs/config.yaml`.
+- Fetch historical data from Alpaca for the instruments and date range specified in the script.
+- Run the full simulation.
+- Print a detailed performance report to the console and save an `equity_curve.png` chart.
+
+### Running Live Paper Trading
+
+This will run the bot in a continuous loop to find and execute trades in your Alpaca paper trading account.
+
+```bash
+python3 run_live.py
+```
+This command will:
+- Load the settings from `configs/config.yaml`.
+- Connect to the Alpaca paper trading API.
+- Enter an infinite loop that scans the market every 10 minutes.
+- Place real paper trades when valid signals are found.
+- Log all activity to `trading_journal.md`.
+- To stop the bot, press `Ctrl+C`.
+
+### Running Unit Tests
+
+This command will discover and run all unit tests in the `tests/` directory to ensure the core logic is working correctly.
+
+```bash
+python3 -m unittest discover tests
+```
 
 ## Configuration (`configs/config.yaml`)
 
