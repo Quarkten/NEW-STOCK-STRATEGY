@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from trading_bot.core.models import Ohlcv
 from trading_bot.core.config import Config, AccountSettings, RiskSettings, PatternSettings, DoubleTopBottomSettings, AbcdSettings, GartleySettings, ExecutionSettings
 from trading_bot.backtesting.engine import Backtester
@@ -21,13 +21,10 @@ class TestBacktesterRiskManagement(unittest.TestCase):
             execution=ExecutionSettings(broker="paper", slippage_pct=0.0, commission_per_trade=1.0)
         )
         self.dummy_data = {
-            "DUMMY": [
-                Ohlcv(timestamp=datetime(2023,1,1), open=100, high=102, low=98, close=101),
-                Ohlcv(timestamp=datetime(2023,1,2), open=101, high=103, low=99, close=102),
-                Ohlcv(timestamp=datetime(2023,1,3), open=102, high=104, low=100, close=103),
-                Ohlcv(timestamp=datetime(2023,1,4), open=103, high=105, low=101, close=104),
-                Ohlcv(timestamp=datetime(2023,1,5), open=104, high=106, low=102, close=105),
-            ]
+            "DUMMY": {
+                "daily": [Ohlcv(timestamp=datetime(2023,1,1)+timedelta(days=i), open=100, high=102, low=98, close=101) for i in range(5)],
+                "hourly": [Ohlcv(timestamp=datetime(2023,1,1)+timedelta(hours=i), open=100, high=102, low=98, close=101) for i in range(24*5)]
+            }
         }
 
     def test_max_open_positions_limit(self):

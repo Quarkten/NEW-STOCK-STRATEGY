@@ -16,21 +16,26 @@ def get_alpaca_api() -> REST:
 
     return REST(key_id=api_key, secret_key=secret_key, base_url=base_url, api_version='v2')
 
-def calculate_position_size(account_equity: float, risk_per_trade_pct: float, entry_price: float, stop_loss_price: float) -> float:
+def calculate_position_size(account_equity: float, base_risk_pct: float, entry_price: float, stop_loss_price: float, confluence_score: int) -> float:
     """
-    Calculates the number of shares to trade based on risk parameters.
+    Calculates the number of shares to trade based on risk parameters and signal conviction.
+    """
+    # Adjust risk based on confluence score
+    if confluence_score > 85:
+        adjusted_risk_pct = base_risk_pct * 1.5
+    elif confluence_score > 70:
+        adjusted_risk_pct = base_risk_pct
+    else:
+        adjusted_risk_pct = base_risk_pct * 0.5
 
-    Returns:
-        float: The number of shares (quantity) to trade.
-    """
-    risk_amount = account_equity * (risk_per_trade_pct / 100.0)
+    risk_amount = account_equity * (adjusted_risk_pct / 100.0)
     risk_per_share = abs(entry_price - stop_loss_price)
 
     if risk_per_share <= 0:
         return 0.0
 
     quantity = risk_amount / risk_per_share
-    return round(quantity, 4) # Return fractional shares for assets that support it
+    return round(quantity, 4)
 
 def place_bracket_order(
     signal: Signal,
@@ -61,9 +66,10 @@ def place_bracket_order(
         # 2. Calculate position size
         quantity = calculate_position_size(
             account_equity=float(account.equity),
-            risk_per_trade_pct=config.risk.default_per_trade_risk_pct,
+            base_risk_pct=config.risk.default_per_trade_risk_pct,
             entry_price=entry_price,
-            stop_loss_price=signal.stop_loss
+            stop_loss_price=signal.stop_loss,
+            confluence_score=signal.confluence_score
         )
 
         if quantity <= 0:

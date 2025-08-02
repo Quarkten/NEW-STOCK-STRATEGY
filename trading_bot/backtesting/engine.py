@@ -95,9 +95,10 @@ class Backtester:
 
         qty = calculate_position_size(
             account_equity=equity_for_sizing,
-            risk_per_trade_pct=self.config.risk.default_per_trade_risk_pct,
+            base_risk_pct=self.config.risk.default_per_trade_risk_pct,
             entry_price=entry_price,
-            stop_loss_price=signal.stop_loss
+            stop_loss_price=signal.stop_loss,
+            confluence_score=signal.confluence_score
         )
 
         if qty <= 0:

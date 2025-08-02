@@ -24,15 +24,27 @@ class TestAlpacaExecutor(unittest.TestCase):
             )
 
     def test_calculate_position_size(self):
-        """Test the position sizing calculation."""
-        size = calculate_position_size(
-            account_equity=100000.0,
-            risk_per_trade_pct=1.0,  # Risking $1000
-            entry_price=150.0,
-            stop_loss_price=140.0  # $10 risk per share
+        """Test the dynamic position sizing calculation based on confluence score."""
+        # High score -> 1.5x risk
+        size_high = calculate_position_size(
+            account_equity=100000.0, base_risk_pct=1.0, entry_price=150.0,
+            stop_loss_price=140.0, confluence_score=90
         )
-        # Expected size = $1000 / $10 = 100 shares
-        self.assertEqual(size, 100.0)
+        self.assertEqual(size_high, 150.0) # 1.5% risk -> $1500 / $10 = 150 shares
+
+        # Medium score -> 1.0x risk
+        size_med = calculate_position_size(
+            account_equity=100000.0, base_risk_pct=1.0, entry_price=150.0,
+            stop_loss_price=140.0, confluence_score=75
+        )
+        self.assertEqual(size_med, 100.0) # 1.0% risk -> $1000 / $10 = 100 shares
+
+        # Low score -> 0.5x risk
+        size_low = calculate_position_size(
+            account_equity=100000.0, base_risk_pct=1.0, entry_price=150.0,
+            stop_loss_price=140.0, confluence_score=65
+        )
+        self.assertEqual(size_low, 50.0) # 0.5% risk -> $500 / $10 = 50 shares
 
     @patch('trading_bot.execution.alpaca_executor.REST')
     def test_place_bracket_order_long(self, mock_api_class):
