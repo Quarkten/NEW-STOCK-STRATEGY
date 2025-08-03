@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Bot Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
+        h1, h2 { color: #333; }
+        .container { display: flex; flex-wrap: wrap; gap: 20px; }
+        .card { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); flex-basis: 200px; text-align: center; }
+        .card h3 { margin-top: 0; color: #555; }
+        .card p { font-size: 24px; margin-bottom: 0; color: #007bff; }
+        .chart { margin-top: 20px; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
+        th { background-color: #007bff; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .win { color: green; }
+        .loss { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Trading Bot Performance Dashboard</h1>
+
+    <h2>Key Metrics</h2>
+    <div class="container">
+        <div class="card">
+            <h3>Total PnL</h3>
+            <p class="{{ 'win' if stats.total_pnl.startswith('+$') else 'loss' }}">{{ stats.total_pnl }}</p>
+        </div>
+        <div class="card">
+            <h3>Win Rate</h3>
+            <p>{{ stats.win_rate }}</p>
+        </div>
+        <div class="card">
+            <h3>Profit Factor</h3>
+            <p>{{ stats.profit_factor }}</p>
+        </div>
+        <div class="card">
+            <h3>Total Trades</h3>
+            <p>{{ stats.total_trades }}</p>
+        </div>
+    </div>
+
+    <div class="chart">
+        <h2>Equity Curve</h2>
+        <img src="{{ url_for('static', filename='equity_curve.png') }}" alt="Equity Curve" style="width:100%;">
+    </div>
+
+    <h2>Trade History</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Trade ID</th>
+                <th>Instrument</th>
+                <th>Direction</th>
+                <th>Entry Time</th>
+                <th>Entry Price</th>
+                <th>Exit Time</th>
+                <th>Exit Price</th>
+                <th>PnL</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for trade in trades %}
+            <tr>
+                <td>{{ trade.trade_id }}</td>
+                <td>{{ trade.instrument }}</td>
+                <td>{{ trade.direction.upper() }}</td>
+                <td>{{ trade.entry_timestamp }}</td>
+                <td>{{ "%.2f"|format(trade.entry_price) }}</td>
+                <td>{{ trade.exit_timestamp or 'N/A' }}</td>
+                <td>{{ "%.2f"|format(trade.exit_price) if trade.exit_price else 'N/A' }}</td>
+                <td class="{{ 'win' if trade.pnl > 0 else 'loss' if trade.pnl < 0 else '' }}">
+                    ${{ "%.2f"|format(trade.pnl) if trade.pnl is not none else 'N/A' }}
+                </td>
+                <td>{{ trade.status }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</body>
+</html>

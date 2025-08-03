@@ -35,8 +35,9 @@ def main():
     for instrument in config.instruments:
         print(f"Fetching historical data for {instrument}...")
 
-        daily_data = fetch_historical_data(instrument, TimeFrame.Day, "2022-01-01", "2023-01-01")
-        hourly_data = fetch_historical_data(instrument, TimeFrame.Hour, "2022-01-01", "2023-01-01")
+        # Using a shorter range to prevent timeouts
+        daily_data = fetch_historical_data(instrument, TimeFrame.Day, "2023-01-01", "2023-04-01")
+        hourly_data = fetch_historical_data(instrument, TimeFrame.Hour, "2023-01-01", "2023-04-01")
 
         if daily_data and hourly_data:
             all_data[instrument] = {

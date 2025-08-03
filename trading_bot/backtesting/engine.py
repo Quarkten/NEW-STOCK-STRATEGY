@@ -36,46 +36,44 @@ class Backtester:
         """
         Runs the backtest simulation over the entire historical data period.
         """
+        from ..core.database_logger import initialize_db
+        initialize_db()
         print("--- Starting Backtest ---")
 
-        # Get a master list of unique days, not hours
-        self.dates = sorted(list(set(c.timestamp.date() for s_data in self.data.values() for c in s_data['daily'])))
+        # Get a master list of unique days from the daily data
+        dates = sorted(list(set(c.timestamp.date() for s_data in self.data.values() for c in s_data['daily'])))
 
-        for date in self.dates:
-            # Get all hourly candles for the current day
-            hourly_candles_for_day = {
-                symbol: [c for c in self.data[symbol]['hourly'] if c.timestamp.date() == date]
-                for symbol in self.data.keys()
-            }
-
-            # Loop through the hours of the day
-            for hour in range(24): # Simplistic loop, a real system would use market hours
+        for date in dates:
+            # This loop now correctly iterates day by day
+            for hour in range(24): # We still check every hour for entries
                 for symbol in self.data.keys():
-                    current_hourly_candle = next((c for c in hourly_candles_for_day[symbol] if c.timestamp.hour == hour), None)
+
+                    # Find the specific hourly candle for this iteration
+                    current_hourly_candle = next((c for c in self.data[symbol]['hourly'] if c.timestamp.date() == date and c.timestamp.hour == hour), None)
                     if not current_hourly_candle:
                         continue
 
-                    # Get all data up to the current point in time
-                    daily_data_to_date = [c for c in self.data[symbol]['daily'] if c.timestamp.date() <= date]
-                    hourly_data_to_date = [c for c in self.data[symbol]['hourly'] if c.timestamp <= current_hourly_candle.timestamp]
-
-                    # --- 1. Check for SL/TP on open positions ---
+                    # --- 1. Check for exits first on every hourly candle ---
                     if symbol in self.account.positions:
                         self._check_for_exit(symbol, current_hourly_candle)
 
-                    # --- 2. Run strategy logic ---
-                    from ..strategies.strategy_library import find_signals
+                    # --- 2. Then, check for entries ---
                     if symbol not in self.account.positions:
-                        signals = find_signals(instrument=symbol, daily_data=daily_data_to_date, hourly_data=hourly_data_to_date, config=self.config)
+                        # We need historical data up to this point for context
+                        daily_data_to_date = [c for c in self.data[symbol]['daily'] if c.timestamp.date() <= date]
+                        hourly_data_to_hour = [c for c in self.data[symbol]['hourly'] if c.timestamp <= current_hourly_candle.timestamp]
+
+                        from ..strategies.strategy_library import find_signals
+                        signals = find_signals(instrument=symbol, daily_data=daily_data_to_date, hourly_data=hourly_data_to_hour, config=self.config)
                         if signals:
                             self._execute_signal(signals[0], current_hourly_candle)
 
-            # --- Mark-to-Market at the end of the day ---
+            # --- Mark-to-Market at the END of the day ---
             unrealized_pnl = 0
             for position in self.account.positions.values():
-                latest_candle_for_pos = next((c for c in reversed(self.data[position.instrument]['daily']) if c.timestamp.date() <= date), None)
-                if latest_candle_for_pos:
-                    position.update_pnl(latest_candle_for_pos.close)
+                latest_daily_candle = next((c for c in reversed(self.data[position.instrument]['daily']) if c.timestamp.date() == date), None)
+                if latest_daily_candle:
+                    position.update_pnl(latest_daily_candle.close)
                     unrealized_pnl += position.unrealized_pnl
 
             current_portfolio_value = self.account.equity + unrealized_pnl
@@ -116,9 +114,11 @@ class Backtester:
             status="open"
         )
 
-        # Deduct commission and add trade to history
+        # Deduct commission, add trade to history, and log to DB
         self.account.equity -= commission
         self.account.trade_history.append(trade)
+        from ..core.database_logger import log_trade_to_db
+        log_trade_to_db(trade, signal)
 
         # --- Update or Create Position ---
         if signal.signal_type == "add":
@@ -193,6 +193,11 @@ class Backtester:
             # Close the trade
             open_trade.close_trade(timestamp=candle.timestamp, price=exit_price)
             self.account.update_equity(self.account.equity + open_trade.pnl)
+
+            # Update the trade record in the database
+            from ..core.database_logger import update_trade_in_db
+            update_trade_in_db(open_trade)
+
             del self.account.positions[symbol]
             print(f"{candle.timestamp.date()}: EXIT {position.direction.upper()} "
                   f"{symbol} @ {exit_price:.2f} for {exit_reason}. PnL: ${open_trade.pnl:.2f}")
