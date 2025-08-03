@@ -1,10 +1,33 @@
 from typing import List, Optional
 from ..core.models import Ohlcv, Signal
 from ..core.config import Config
+from ..core.patterns import Pattern
 from ..patterns.market_regime import find_swing_points
 from ..patterns.engulfing import find_engulfing_patterns
 from ..patterns.abcd import find_abcd_patterns
 from ..patterns.gartley import find_gartley_patterns
+from ..patterns.candlestick_patterns import find_bullish_engulfing, find_morning_star, find_hammer, find_three_white_soldiers, find_piercing_line
+from ..patterns.chart_patterns import find_cup_and_handle, find_inverse_head_and_shoulders, find_falling_wedge, find_bull_flag, find_ascending_triangle
+
+def find_all_patterns(data: List[Ohlcv]) -> List[Pattern]:
+    """Finds all available patterns in the given data."""
+    patterns = []
+    
+    # Candlestick patterns
+    patterns.append(find_bullish_engulfing(data))
+    patterns.append(find_morning_star(data))
+    patterns.append(find_hammer(data))
+    patterns.append(find_three_white_soldiers(data))
+    patterns.append(find_piercing_line(data))
+    
+    # Chart patterns
+    patterns.append(find_cup_and_handle(data))
+    patterns.append(find_inverse_head_and_shoulders(data))
+    patterns.append(find_falling_wedge(data))
+    patterns.append(find_bull_flag(data))
+    patterns.append(find_ascending_triangle(data))
+    
+    return [p for p in patterns if p is not None]
 
 def find_signals(
     instrument: str,
@@ -34,20 +57,18 @@ def find_signals(
 
     # Engulfing Patterns on Hourly Chart
     if config.patterns.enable_engulfing:
-        engulfing_patterns = find_engulfing_patterns(hourly_data[-2:])
-        if engulfing_patterns:
-            pattern = engulfing_patterns[0]
+        patterns = find_all_patterns(hourly_data)
+        for pattern in patterns:
             direction = "long" if pattern.pattern_type == "bullish" else "short"
 
             # 3. Check for Alignment
-            if (major_trend == "Uptrend" and direction == "long") or \
-               (major_trend == "Downtrend" and direction == "short"):
+            if major_trend == "Uptrend" and direction == "long":
 
                 stop_loss = pattern.candle.low if direction == "long" else pattern.candle.high
                 signal = Signal(
                     instrument=instrument,
                     timestamp=current_hourly_candle.timestamp,
-                    pattern_name=f"H1 Engulfing ({major_trend})",
+                    pattern_name=f"H1 {pattern.pattern_name} ({major_trend})",
                     signal_type="entry",
                     direction=direction,
                     confluence_score=0, # Will be scored later
@@ -103,17 +124,6 @@ def find_add_on_signals(
             stop_loss=current_candle.low,
             candle=current_candle
         )
-    # If we are short, look for a bearish continuation
-    elif position_direction == "short" and pattern.pattern_type == "bearish":
-        return Signal(
-            instrument=instrument,
-            timestamp=current_candle.timestamp,
-            pattern_name="Engulfing Add-on",
-            signal_type="add",
-            direction="short",
-            confluence_score=80,
-            stop_loss=current_candle.high,
-            candle=current_candle
-        )
+    
 
     return None

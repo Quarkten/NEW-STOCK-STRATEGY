@@ -22,39 +22,7 @@ def find_double_top_bottom_patterns(
     """
     signals = []
 
-    # --- Find Double Tops (M shape) ---
-    if len(swing_highs) >= 2 and len(swing_lows) >= 1:
-        for i in range(len(swing_highs) - 1):
-            peak1 = swing_highs[i]
-            peak2 = swing_highs[i+1]
-
-            # Find the intervening swing low (the neckline)
-            neckline_low = next((low for low in swing_lows if peak1[0] < low[0] < peak2[0]), None)
-            if not neckline_low:
-                continue
-
-            # Check for price similarity between the two peaks
-            price_diff = abs(peak1[1] - peak2[1]) / peak1[1]
-            if price_diff <= config['price_similarity_threshold']:
-                # We have a potential Double Top. Now, we need to watch for a neckline break.
-                # Start searching for the break from the bar after the second peak.
-                signal_found = False
-                for j in range(peak2[0] + 1, len(data)):
-                    if data[j].close < neckline_low[1]:
-                        signals.append(Signal(
-                            instrument="",
-                            timestamp=data[j].timestamp,
-                            pattern_name="Double Top",
-                            signal_type="entry",
-                            direction="short",
-                            confluence_score=0,
-                            stop_loss=max(peak1[1], peak2[1]),
-                            candle=data[j]
-                        ))
-                        signal_found = True
-                        break
-                if signal_found:
-                    break
+    
     # --- Find Double Bottoms (W shape) ---
     if len(swing_lows) >= 2 and len(swing_highs) >= 1:
         for i in range(len(swing_lows) - 1):
